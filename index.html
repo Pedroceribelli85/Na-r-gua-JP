@@ -1124,7 +1124,7 @@ function setConcluirPay(p){ concluirTmp.formaPagamento=p; document.querySelector
 function addProdutoConcluir(){
   const sel=document.getElementById('cc-prod-sel'); const p=state.produtos.find(x=>x.id===sel.value);
   if(!p) return;
-  concluirProdutos.push({id:p.id,nome:p.nome,preco:Number(p.preco)||0});
+  concluirProdutos.push({id:p.id,nome:p.nome,preco:Number(p.preco)||0,custo:Number(p.custo)||0});
   sel.value=''; renderProdutosConcluir(); updConcluir();
 }
 function removeProdutoConcluir(i){ concluirProdutos.splice(i,1); renderProdutosConcluir(); updConcluir(); }
@@ -1166,7 +1166,7 @@ function confirmarConcluir(id){
   const lancId=uid();
   const nomesProd=concluirProdutos.map(p=>p.nome);
   const desc=`${a.servico} — ${a.clienteNome}`+(nomesProd.length?` (+ ${nomesProd.join(', ')})`:'');
-  state.lancamentos.push({id:lancId,tipo:'entrada',descricao:desc,categoria:'Serviço',valor:f,valorLiquido:liq,formaPagamento:concluirTmp.formaPagamento,data:a.data,createdAt:Date.now(),origem:'agendamento'});
+  state.lancamentos.push({id:lancId,tipo:'entrada',descricao:desc,categoria:'Serviço',valor:f,valorLiquido:liq,formaPagamento:concluirTmp.formaPagamento,data:a.data,createdAt:Date.now(),origem:'agendamento',produtosComanda:concluirProdutos.map(p=>({id:p.id,nome:p.nome,preco:p.preco,custo:p.custo||0}))});
   if(concluirProdutos.length){
     concluirProdutos.forEach(cp=>{ const prod=state.produtos.find(x=>x.id===cp.id); if(prod && prod.estoque!==''&&prod.estoque!=null) prod.estoque=Math.max(0,parseInt(prod.estoque)-1); });
     save('produtos');
@@ -1295,15 +1295,9 @@ function modalHist(id){
 }
 
 /* ============ BARBEIROS ============ */
-let barbFiltro=todayStr(), barbModo='mes';
-function barbNavDate(dir){
-  const d=parseLocalDate(barbFiltro); const D=new Date(d);
-  if(barbModo==='dia'){D.setDate(D.getDate()+dir);}
-  else if(barbModo==='semana'){D.setDate(D.getDate()+dir*7);}
-  else if(barbModo==='mes'){D.setMonth(D.getMonth()+dir);}
-  return toISO(D);
-}
-function barbPeriodoLabel(){
+let barbFiltro=todayStr(), barbModo='periodo', barbFiltroInicio=todayStr().slice(0,8)+'01', barbFiltroFim=todayStr();
+function barbNavDate(dir){ return barbFiltro; }
+function barbPeriodoLabel(){if(barbModo==='periodo') return `${fmtDate(barbFiltroInicio)} – ${fmtDate(barbFiltroFim)}`;
   if(barbModo==='dia') return fmtDate(barbFiltro);
   if(barbModo==='semana'){ const w=weekDays(barbFiltro); return `${fmtDate(w[0])} – ${fmtDate(w[6])}`; }
   return new Date(barbFiltro+'-01T12:00:00').toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
@@ -1312,12 +1306,12 @@ function viewBarbeiros(){
   const barbs=state.config.barbeiros||[];
   const com=state.config.comissoes||{};
   const dias=barbModo==='semana'?weekDays(barbFiltro):[];
-  const filtroAg=a=>{
+  const filtroAg=a=>{if(barbModo==='periodo') return (a.data||'')>=barbFiltroInicio&&(a.data||'')<=barbFiltroFim;
     if(barbModo==='dia') return a.data===barbFiltro;
     if(barbModo==='semana') return dias.includes(a.data);
     return (a.data||'').startsWith(barbFiltro.slice(0,7));
   };
-  const modos=[['dia','Dia'],['semana','Semana'],['mes','Mês']];
+  const modos=[['periodo','Período'],['dia','Dia'],['semana','Semana'],['mes','Mês']];
   return `
     <div class="sec-head"><div><h1>Barbeiros</h1><p>Produção e comissões por período</p></div></div>
     <div class="tabs" style="margin-bottom:12px">${modos.map(([id,l])=>`<button class="tab ${barbModo===id?'active':''}" onclick="barbModo='${id}';render()">${l}</button>`).join('')}</div>
@@ -1834,8 +1828,11 @@ function modalProduto(id){
     <div class="field"><label class="lbl">Nome</label><input id="p-nome" class="inp" value="${esc(p.nome)}" placeholder="Nome do produto"></div>
     <div class="field"><label class="lbl">Categoria</label><select id="p-cat" class="inp">${CATS_PROD.map(c=>`<option ${p.categoria===c?'selected':''}>${c}</option>`).join('')}</select></div>
     <div class="field"><label class="lbl">Descrição</label><input id="p-desc" class="inp" value="${esc(p.descricao)}" placeholder="Opcional"></div>
-    <div class="row2"><div class="field"><label class="lbl">Preço (R$)</label><input id="p-preco" type="number" step="0.01" min="0" class="inp" value="${p.preco}" placeholder="0,00"></div>
-      <div class="field"><label class="lbl">Estoque</label><input id="p-est" type="number" min="0" class="inp" value="${p.estoque}" placeholder="0"></div></div>
+    <div class="row2"><div class="field"><label class="lbl">Preço de Venda (R$)</label><input id="p-preco" type="number" step="0.01" min="0" class="inp" value="${p.preco}" placeholder="0,00"></div>
+    <div class="field"><label class="lbl">Custo do Produto (R$)</label><input id="p-custo" type="number" step="0.01" min="0" class="inp" value="${p.custo||''}" placeholder="0,00"></div></div>
+    <div class="row2"><div class="field"><label class="lbl">Estoque</label><input id="p-est" type="number" min="0" class="inp" value="${p.estoque}" placeholder="0"></div>
+    <div class="field"><label class="lbl" style="opacity:0">-</label><div style="padding:10px 12px;background:var(--inner);border-radius:8px;font-size:12px;color:var(--text-2);margin-top:0">${(p.preco&&p.custo)?`Margem: <strong style="color:var(--green)">${fmtMoney((p.preco||0)-(p.custo||0))}
+    </strong>`:'Margem aparece ao preencher preço e custo'}</div></div></div>
     <div class="field"><label class="lbl">Data de Validade</label><input id="p-val" type="date" class="inp" value="${p.validade||''}"></div>
     <div class="modal-foot"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveProduto('${id||''}')">Salvar</button></div>
   `);
@@ -1852,7 +1849,7 @@ function lerFoto(e){
 function saveProduto(id){
   const g=x=>document.getElementById(x).value;
   const nome=g('p-nome').trim(); if(!nome){ alert('Informe o nome.'); return; }
-  const data={nome,categoria:g('p-cat'),descricao:g('p-desc').trim(),preco:parseFloat(g('p-preco'))||0,validade:g('p-val'),estoque:g('p-est')!==''?parseInt(g('p-est')):'',fotoUrl:prodFoto};
+const data={nome,categoria:g('p-cat'),descricao:g('p-desc').trim(),preco:parseFloat(g('p-preco'))||0,custo:parseFloat(g('p-custo'))||0,validade:g('p-val'),estoque:g('p-est')!==''?parseInt(g('p-est')):'',fotoUrl:prodFoto};
   if(id) state.produtos=state.produtos.map(p=>p.id===id?{...p,...data}:p);
   else state.produtos.push({...data,id:uid(),createdAt:Date.now()});
   save('produtos'); closeModal(); render();
