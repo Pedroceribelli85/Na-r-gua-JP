@@ -1315,21 +1315,22 @@ function viewBarbeiros(){
   return `
     <div class="sec-head"><div><h1>Barbeiros</h1><p>Produção e comissões por período</p></div></div>
     <div class="tabs" style="margin-bottom:12px">${modos.map(([id,l])=>`<button class="tab ${barbModo===id?'active':''}" onclick="barbModo='${id}';render()">${l}</button>`).join('')}</div>
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
-      <button class="btn btn-sm" onclick="barbFiltro='${barbNavDate(-1)}';render()">‹</button>
-      <span style="font-size:13px;font-weight:600;color:var(--gold);flex:1;text-align:center">${barbPeriodoLabel()}</span>
-      ${barbModo==='dia'?`<input type="date" class="inp" style="max-width:140px" value="${barbFiltro}" onchange="barbFiltro=this.value;render()">`:barbModo==='mes'?`<input type="month" class="inp" style="max-width:140px" value="${barbFiltro.slice(0,7)}" onchange="barbFiltro=this.value+'-01';render()">`:``}
-      <button class="btn btn-sm" onclick="barbFiltro='${barbNavDate(1)}';render()">›</button>
-    </div>
-    ${barbModo==='periodo'?`
-    <div class="card" style="padding:14px;margin-bottom:16px">
-      <div style="font-size:11px;color:var(--text-3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Selecionar período</div>
-      <div class="row2">
-        <div class="field"><label class="lbl">De</label><input type="date" class="inp" value="${barbFiltroInicio}" onchange="barbFiltroInicio=this.value;render()"></div>
-        <div class="field"><label class="lbl">Até</label><input type="date" class="inp" value="${barbFiltroFim}" onchange="barbFiltroFim=this.value;render()"></div>
-      </div>
-      <div style="font-size:12px;color:var(--gold);font-weight:600;text-align:center">${barbPeriodoLabel()}</div>
-    </div>`:''}
+    // DEPOIS
+${barbModo==='periodo'?`
+<div class="card" style="padding:14px;margin-bottom:16px">
+  <div style="font-size:11px;color:var(--text-3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Selecionar período</div>
+  <div class="row2">
+    <div class="field"><label class="lbl">De</label><input type="date" class="inp" value="${barbFiltroInicio}" onchange="barbFiltroInicio=this.value;render()"></div>
+    <div class="field"><label class="lbl">Até</label><input type="date" class="inp" value="${barbFiltroFim}" onchange="barbFiltroFim=this.value;render()"></div>
+  </div>
+  <div style="font-size:12px;color:var(--gold);font-weight:600;text-align:center">${barbPeriodoLabel()}</div>
+</div>`:`
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
+  <button class="btn btn-sm" onclick="barbFiltro='${barbNavDate(-1)}';render()">‹</button>
+  <span style="font-size:13px;font-weight:600;color:var(--gold);flex:1;text-align:center">${barbPeriodoLabel()}</span>
+  ${barbModo==='dia'?`<input type="date" class="inp" style="max-width:140px" value="${barbFiltro}" onchange="barbFiltro=this.value;render()">`:barbModo==='mes'?`<input type="month" class="inp" style="max-width:140px" value="${barbFiltro.slice(0,7)}" onchange="barbFiltro=this.value+'-01';render()">`:``}
+  <button class="btn btn-sm" onclick="barbFiltro='${barbNavDate(1)}';render()">›</button>
+</div>`}
     ${barbs.length?barbs.map(b=>{
       const ags=state.agendamentos.filter(a=>a.barbeiro===b&&a.status==='concluido'&&filtroAg(a));
       const agsPag=ags.filter(a=>!a.ePacote);
@@ -1406,7 +1407,7 @@ function viewBarbeiros(){
   });
   const linhasDetalhes = agsPag
     .slice()
-    .sort((a,x)=>a.data>x.data?1:-1)
+  .sort((a,x)=>`${a.data}${a.hora}`>`${x.data}${x.hora}`?1:-1)
     .map(a=>{
       const lanc=a.lancamentoId?state.lancamentos.find(l=>l.id===a.lancamentoId):null;
       const baseServ=lanc?lanc.valor:(a.preco||servicoPreco(a.servico)||0);
@@ -1848,7 +1849,7 @@ function viewProdutos(){
 }
 function delProduto(id){ if(confirm('Remover produto?')){ state.produtos=state.produtos.filter(p=>p.id!==id); save('produtos'); render(); } }
 function modalProduto(id){
-  const p=id?state.produtos.find(x=>x.id===id):{nome:'',categoria:'Outros',descricao:'',preco:'',validade:'',estoque:'',fotoUrl:''};
+  const p=id?state.produtos.find(x=>x.id===id):{nome:'',categoria:'Outros',descricao:'',preco:'',custo:'',validade:'',estoque:'',fotoUrl:''};
   prodFoto=p.fotoUrl||'';
   openModal(`
     <div class="modal-head"><h2>${id?'Editar':'Novo'} Produto</h2><button onclick="closeModal()">${ICON.x(20)}</button></div>
