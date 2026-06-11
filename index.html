@@ -1321,12 +1321,26 @@ function viewBarbeiros(){
       ${barbModo==='dia'?`<input type="date" class="inp" style="max-width:140px" value="${barbFiltro}" onchange="barbFiltro=this.value;render()">`:barbModo==='mes'?`<input type="month" class="inp" style="max-width:140px" value="${barbFiltro.slice(0,7)}" onchange="barbFiltro=this.value+'-01';render()">`:``}
       <button class="btn btn-sm" onclick="barbFiltro='${barbNavDate(1)}';render()">›</button>
     </div>
+    ${barbModo==='periodo'?`
+    <div class="card" style="padding:14px;margin-bottom:16px">
+      <div style="font-size:11px;color:var(--text-3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Selecionar período</div>
+      <div class="row2">
+        <div class="field"><label class="lbl">De</label><input type="date" class="inp" value="${barbFiltroInicio}" onchange="barbFiltroInicio=this.value;render()"></div>
+        <div class="field"><label class="lbl">Até</label><input type="date" class="inp" value="${barbFiltroFim}" onchange="barbFiltroFim=this.value;render()"></div>
+      </div>
+      <div style="font-size:12px;color:var(--gold);font-weight:600;text-align:center">${barbPeriodoLabel()}</div>
+    </div>`:''}
     ${barbs.length?barbs.map(b=>{
-      const ultimoPagto = (state.config.comissoesPagas||{})[b] || 0;
-      const ags=state.agendamentos.filter(a=>a.barbeiro===b&&a.status==='concluido'&&filtroAg(a)&&(a.createdAt||0)>ultimoPagto);
+      const ags=state.agendamentos.filter(a=>a.barbeiro===b&&a.status==='concluido'&&filtroAg(a));
       const agsPag=ags.filter(a=>!a.ePacote);
       const agsPac=ags.filter(a=>a.ePacote);
-      const receita=agsPag.reduce((s,a)=>s+(a.preco||servicoPreco(a.servico)||0),0);
+      const receita=agsPag.reduce((s,a)=>{
+        const lanc=a.lancamentoId?state.lancamentos.find(l=>l.id===a.lancamentoId):null;
+        const baseServ=lanc?lanc.valor:(a.preco||servicoPreco(a.servico)||0);
+        const totalProd=lanc?(lanc.produtosComanda||[]).reduce((sp,p)=>sp+p.preco,0):0;
+        const margemProd=lanc?(lanc.produtosComanda||[]).reduce((sp,p)=>sp+(p.preco-(p.custo||0)),0):0;
+        return s+(baseServ-totalProd)+margemProd;
+      },0);
       const pct=parseFloat(com[b])||0;
       const comissao=receita*pct/100;
       const byServico={};
@@ -1360,37 +1374,53 @@ function viewBarbeiros(){
   function gerarRelatorioBarbeiro(b){
   const com = state.config.comissoes||{};
   const dias = barbModo==='semana'?weekDays(barbFiltro):[];
-  const filtroAg = a=>{
+ const filtroAg = a=>{
+    if(barbModo==='periodo') return (a.data||'')>=barbFiltroInicio&&(a.data||'')<=barbFiltroFim;
     if(barbModo==='dia') return a.data===barbFiltro;
     if(barbModo==='semana') return dias.includes(a.data);
     return (a.data||'').startsWith(barbFiltro.slice(0,7));
   };
-  const ultimoPagto = (state.config.comissoesPagas||{})[b]||0;
-  const ags = state.agendamentos.filter(a=>a.barbeiro===b&&a.status==='concluido'&&filtroAg(a)&&(a.createdAt||0)>ultimoPagto);
+  const ags = state.agendamentos.filter(a=>a.barbeiro===b&&a.status==='concluido'&&filtroAg(a));
   const agsPag = ags.filter(a=>!a.ePacote);
-  const receita = agsPag.reduce((s,a)=>s+(a.preco||servicoPreco(a.servico)||0),0);
+  const receita = agsPag.reduce((s,a)=>{
+    const lanc=a.lancamentoId?state.lancamentos.find(l=>l.id===a.lancamentoId):null;
+    const baseServ=lanc?lanc.valor:(a.preco||servicoPreco(a.servico)||0);
+    const totalProd=lanc?(lanc.produtosComanda||[]).reduce((sp,p)=>sp+p.preco,0):0;
+    const margemProd=lanc?(lanc.produtosComanda||[]).reduce((sp,p)=>sp+(p.preco-(p.custo||0)),0):0;
+    return s+(baseServ-totalProd)+margemProd;
+  },0);
   const pct = parseFloat(com[b])||0;
   const comissao = receita*pct/100;
   const periodo = barbPeriodoLabel();
   const barbearia = state.config.barbearia?.nome||'Barbearia';
   const agrupado = {};
   agsPag.forEach(a=>{
-    const preco = a.preco||servicoPreco(a.servico)||0;
+    const lanc=a.lancamentoId?state.lancamentos.find(l=>l.id===a.lancamentoId):null;
+    const baseServ=lanc?lanc.valor:(a.preco||servicoPreco(a.servico)||0);
+    const totalProd=lanc?(lanc.produtosComanda||[]).reduce((sp,p)=>sp+p.preco,0):0;
+    const margemProd=lanc?(lanc.produtosComanda||[]).reduce((sp,p)=>sp+(p.preco-(p.custo||0)),0):0;
+    const base=(baseServ-totalProd)+margemProd;
     if(!agrupado[a.servico]) agrupado[a.servico]={qtd:0,total:0};
     agrupado[a.servico].qtd++;
-    agrupado[a.servico].total+=preco;
+    agrupado[a.servico].total+=base;
   });
   const linhasDetalhes = agsPag
     .slice()
     .sort((a,x)=>a.data>x.data?1:-1)
     .map(a=>{
-      const preco = a.preco||servicoPreco(a.servico)||0;
+      const lanc=a.lancamentoId?state.lancamentos.find(l=>l.id===a.lancamentoId):null;
+      const baseServ=lanc?lanc.valor:(a.preco||servicoPreco(a.servico)||0);
+      const prods=lanc?(lanc.produtosComanda||[]):[];
+      const totalProd=prods.reduce((sp,p)=>sp+p.preco,0);
+      const margemProd=prods.reduce((sp,p)=>sp+(p.preco-(p.custo||0)),0);
+      const baseComissao=(baseServ-totalProd)+margemProd;
+      const prodStr=prods.length?`<br><span style="font-size:11px;color:#6b7280">+ ${prods.map(p=>`${esc(p.nome)} (margem: ${fmtMoney(p.preco-(p.custo||0))})`).join(', ')}</span>`:'';
       return `<tr>
         <td>${fmtDate(a.data)}</td>
         <td>${esc(a.hora||'—')}</td>
         <td>${esc(a.clienteNome||'—')}</td>
-        <td>${esc(a.servico||'—')}</td>
-        <td style="text-align:right;font-weight:600;color:#16a34a">${fmtMoney(preco)}</td>
+        <td>${esc(a.servico||'—')}${prodStr}</td>
+        <td style="text-align:right;font-weight:600;color:#16a34a">${fmtMoney(baseComissao)}</td>
       </tr>`;
     }).join('');
   const linhasResumo = Object.entries(agrupado).map(([serv,d])=>`<tr>
